@@ -1,0 +1,577 @@
+---
+title: "World Layoffs 2023-25"
+author: "Kaustubh Sardesai"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+library(DBI)
+library(RMySQL)
+
+con <- dbConnect(
+  RMySQL::MySQL(),
+  dbname = "World_layoffs",
+  host = "localhost",
+  user = "root",
+  password = "Majorbatra@5"
+)
+```
+
+```{sql connection=con}
+## Data Cleaning and Exploratory Data Analysis Project
+## World Layoffs 
+
+SELECT* 
+FROM World_layoffs.layoffs;
+```
+
+```{sql connection=con}
+##1. Remove Duplicates 
+##2. Standardise the Data 
+##3. Null Values or Blank Values 
+##4. Remove Any Columns
+
+
+## Creating a staging table to aboid any manipulations of raw data 
+```
+
+```{sql connection=con}
+DROP TABLE IF EXISTS layoffs_staging;
+```
+
+```{sql connection=con}
+CREATE TABLE layoffs_staging
+LIKE layoffs;
+```
+
+```{sql connection=con}
+INSERT  layoffs_staging 
+SELECT* 
+FROM layoffs
+; 
+```
+
+```{sql connection=con}
+## 1. Remove Duplicates 
+
+SELECT *,
+ROW_NUMBER() OVER
+(PARTITION BY company,location,total_laid_off,`date`,percentage_laid_off,industry,`source`,stage,funds_raised,country,date_added)
+AS ROW_NUM   
+FROM World_layoffs.layoffs_staging
+; 
+##If ROW_NUM is 2 its a duplicate 
+```
+
+```{sql connection=con}
+WITH duplicate_cte AS 
+(
+SELECT *,
+ROW_NUMBER() OVER
+(PARTITION BY company,location,total_laid_off,`date`,percentage_laid_off,industry,`source`,stage,funds_raised,country,date_added)
+AS ROW_NUM   
+FROM World_layoffs.layoffs_staging
+)
+SELECT*
+FROM duplicate_cte 
+WHERE ROW_NUM > 1
+;  
+## Filtering for the duplicates using CTE 
+```
+
+```{sql connection=con}
+SELECT* 
+FROM layoffs_staging
+WHERE company = 'Cars24' 
+; 
+## Confirming the results of above qury 
+
+```
+
+```{sql connection=con}
+DROP TABLE IF EXISTS layoffs_staging;
+```
+
+```{sql connection=con}
+CREATE TABLE `layoffs_staging`(
+  `company` text,
+  `location` text,
+  `total_laid_off` INT,
+  `date` text,
+  `percentage_laid_off` DECIMAL(5,2),
+  `industry` text,
+  `source` text,
+  `stage` text,
+  `funds_raised` int DEFAULT NULL,
+  `country` text,
+  `date_added` text,
+  `ROW_NUM` INT 
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+; 
+## Created a layoffs _staging2 table to manupulate dupliate data 
+```
+
+```{sql connection=con}
+SELECT* 
+FROM World_layoffs.layoffs_staging2 
+; 
+```
+
+```{sql connection=con}
+INSERT INTO layoffs_staging2 (
+    company,
+    location,
+    total_laid_off,
+    `date`,
+    percentage_laid_off,
+    industry,
+    source,
+    stage,
+    funds_raised,
+    country,
+    date_added,
+    ROW_NUM
+)
+SELECT
+    company,
+    location,
+    total_laid_off,
+    `date`,
+    percentage_laid_off,
+    industry,
+    source,
+    stage,
+    funds_raised,
+    country,
+    date_added,
+    ROW_NUMBER() OVER (
+        PARTITION BY
+            company,
+            location,
+            total_laid_off,
+            `date`,
+            percentage_laid_off,
+            industry,
+            source,
+            stage,
+            funds_raised,
+            country,
+            date_added
+    ) AS ROW_NUM
+FROM layoffs_staging;
+## Added all the data from layoffs_staging table plus the ROW_NUM coloumn which is to be filtered next 
+```
+
+```{sql connection=con}
+SELECT* 
+FROM World_layoffs.layoffs_staging2 
+WHERE ROW_NUM > 1
+; 
+## Filtered Duplicates in layoffs_staging2 table 
+```
+
+```{sql connection=con}
+DELETE 
+FROM World_layoffs.layoffs_staging2 
+WHERE ROW_NUM > 1
+; 
+##Deleted duplicates from layoffs_staging2 table 
+
+```
+
+```{sql connection=con}
+SELECT* 
+FROM World_layoffs.layoffs_staging2;
+
+## Stage 1 - removing duplicates complete 
+```
+
+```{sql connection=con}
+## 2. Standardise the Data 
+
+SELECT company, (TRIM(company)) 
+FROM World_layoffs.layoffs_staging2
+;
+
+```
+
+```{sql connection=con}
+UPDATE World_layoffs.layoffs_staging2
+SET company = TRIM(company)
+;
+```
+
+```{sql connection=con}
+SELECT DISTINCT industry
+FROM World_layoffs.layoffs_staging2
+ORDER BY 1
+; 
+## Just to check 
+```
+
+```{sql connection=con}
+SELECT DISTINCT location
+FROM World_layoffs.layoffs_staging2
+ORDER BY 1
+; 
+## Just to check
+```
+
+```{sql connection=con}
+SELECT DISTINCT country 
+FROM World_layoffs.layoffs_staging2
+ORDER BY 1
+; 
+## Just to check 
+```
+
+```{sql connection=con}
+UPDATE World_layoffs.layoffs_staging2
+SET `date` = STR_TO_DATE(`date`, '%m/%d/%Y')
+WHERE `date` LIKE '%/%/%'
+; 
+## Converting date coloumn from text to int 
+```
+
+```{sql connection=con}
+ALTER TABLE World_layoffs.layoffs_staging2
+MODIFY COLUMN `date` DATE
+; 
+## Modifying the coloumn and table 
+```
+
+```{sql connection=con}
+SELECT*
+FROM World_layoffs.layoffs_staging2
+WHERE industry IS NULL
+OR industry = ''
+; 
+## Found another duplicate company named appsmith - it wasnt filtered earlier as industry coloumn had no data on these rows
+```
+
+```{sql connection=con}
+## Addition to stage 1 - removing the duplicates 
+SELECT*
+FROM World_layoffs.layoffs_staging2
+WHERE company = 'appsmith'
+;
+## making sure if there is more data on Company 'Appsmith' - only 2 lines both same 
+
+```
+
+```{sql connection=con}
+DELETE 
+FROM World_layoffs.layoffs_staging2 
+WHERE company = 'appsmith'
+; 
+##Deleted all layoff data from company 'Applesmith' as data couldnt be varified as accurate 
+
+```
+
+```{sql connection=con}
+## 3. Null Values or Blank Values 
+## No NULLS in relevent coloumns 
+
+## 4. Remove Any Columns
+## No Coloumns to be removed at this stage
+
+```
+
+```{sql connection=con}
+## Exploratory Data Analysis 
+
+SELECT* 
+FROM World_layoffs.layoffs_staging2 
+```
+
+```{sql connection=con}
+SELECT MAX(total_laid_off), MAX(percentage_laid_off) 
+FROM World_layoffs.layoffs_staging2
+; 
+## finding MAX 
+```
+
+```{sql connection=con}
+SELECT* 
+FROM World_layoffs.layoffs_staging2 
+WHERE percentage_laid_off = 1
+ORDER BY total_laid_off DESC
+; 
+## companies which went bust 
+```
+
+```{sql connection=con}
+SELECT* 
+FROM World_layoffs.layoffs_staging2 
+WHERE percentage_laid_off = 1
+ORDER BY funds_raised DESC
+; 
+## layoffs based on funds raised by companies 
+```
+
+```{sql connection=con}
+SELECT MIN(`date`), MAX(`date`) 
+FROM World_layoffs.layoffs_staging2
+;
+## finding start and end date of the records in the dataset 
+```
+
+```{sql connection=con}
+SELECT company, SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+GROUP BY company 
+ORDER BY 2 DESC
+; 
+## Layoffs based on company
+```
+
+```{sql connection=con}
+SELECT industry, SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+GROUP BY industry 
+ORDER BY 2 DESC
+; 
+## layoffs based on industry 
+```
+
+```{sql connection=con}
+SELECT country, SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+GROUP BY country 
+ORDER BY 2 DESC
+;
+## layoffs based on country 
+```
+
+```{sql connection=con}
+SELECT YEAR (`date`), SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+GROUP BY YEAR (`date`)
+ORDER BY 1 DESC
+;
+## layoffs based on year 
+
+```
+
+```{sql connection=con}
+SELECT stage, SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+GROUP BY stage 
+ORDER BY 2 DESC
+; 
+## layoffs based on fundraising stage of the company 
+```
+
+```{sql connection=con}
+SELECT substring(`date`,1,7) as `MONTH`, SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+WHERE substring(`date`,1,7) IS NOT NULL
+GROUP BY `MONTH`
+ORDER BY 1 ASC 
+; 
+## layoffs based on month of the year 
+```
+
+```{sql connection=con}
+WITH rolling_total AS 
+(
+SELECT substring(`date`,1,7) as `MONTH`, SUM(total_laid_off) as total_fired 
+FROM World_layoffs.layoffs_staging2 
+WHERE substring(`date`,1,7) IS NOT NULL
+GROUP BY `MONTH`
+ORDER BY 1 ASC 
+)
+SELECT `MONTH`, total_fired, SUM(total_fired) OVER (ORDER BY `MONTH`) AS rolling_total 
+FROM rolling_total 
+; 
+##rolling total of layoffs 
+```
+
+```{sql connection=con}
+SELECT company, YEAR (`date`),  SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+GROUP BY company, YEAR (`date`)
+ORDER BY company ASC
+; 
+## layoffs per company per year 
+```
+
+```{sql connection=con}
+WITH company_year (company, years, total_laid_off) AS 
+(
+SELECT company, YEAR (`date`),  SUM(total_laid_off)
+FROM World_layoffs.layoffs_staging2 
+GROUP BY company, YEAR (`date`)
+),
+Company_Year_Rank AS 
+(
+SELECT*, DENSE_RANK () OVER(PARTITION BY years ORDER BY total_laid_off DESC) AS ranking
+FROM company_year
+WHERE years IS NOT NULL
+ORDER BY ranking ASC
+)
+SELECT *
+FROM Company_Year_Rank 
+WHERE ranking  <= 5
+;
+## 2 CTEs used to find out top 5 companies (in terms of employee lay offs) every year. 
+```
+
+```{sql connection=con}
+SELECT
+    DATE_FORMAT(`date`, '%Y-%m') AS month,
+    SUM(total_laid_off) AS total_laid_off
+FROM layoffs_staging2
+GROUP BY month
+ORDER BY month
+; 
+## Time based Trends
+
+```
+
+![](Data%20Viz%20PNGs/Sheet%201.png)
+
+```{sql connection=con}
+WITH monthly AS (
+    SELECT
+        DATE_FORMAT(`date`, '%Y-%m') AS month,
+        SUM(total_laid_off) AS total_laid_off
+    FROM layoffs_staging2
+    GROUP BY month
+)
+SELECT
+    month,
+    total_laid_off,
+    SUM(total_laid_off) OVER (ORDER BY month) AS cumulative_layoffs
+FROM monthly
+;
+## Rolling (Cumulative) Layoffs
+```
+
+![](Data%20Viz%20PNGs/Sheet%202.png)
+
+```{sql connection=con}
+WITH monthly AS (
+    SELECT
+        DATE_FORMAT(`date`, '%Y-%m') AS month,
+        SUM(total_laid_off) AS total_laid_off
+    FROM layoffs_staging2
+    GROUP BY month
+)
+SELECT
+    month,
+    total_laid_off,
+    SUM(total_laid_off) OVER (ORDER BY month) AS cumulative_layoffs
+FROM monthly
+;
+## Rolling (Cumulative) Layoffs
+```
+
+```{sql connection=con}
+SELECT
+    company,
+    SUM(total_laid_off) AS total_laid_off
+FROM layoffs_staging2
+GROUP BY company
+ORDER BY total_laid_off DESC
+LIMIT 10
+; 
+## Top 10 Companies by Total Layoffs
+```
+
+![](Data%20Viz%20PNGs/Sheet%203.png)
+
+```{sql connection=con}
+SELECT
+    industry,
+    SUM(total_laid_off) AS total_laid_off
+FROM layoffs_staging2
+GROUP BY industry
+ORDER BY total_laid_off DESC
+;
+## Layoffs by Industry
+```
+
+![](Data%20Viz%20PNGs/Sheet%204.png)
+
+```{sql connection=con}
+SELECT
+    country,
+    SUM(total_laid_off) AS total_laid_off
+FROM layoffs_staging2
+GROUP BY country
+; 
+##Layoffs by Country (Map)
+```
+
+![](Data%20Viz%20PNGs/Sheet%205.png)
+
+```{sql connection=con}
+SELECT
+    stage,
+    SUM(total_laid_off) AS total_laid_off
+FROM layoffs_staging2
+GROUP BY stage
+ORDER BY total_laid_off DESC
+;
+## Layoffs by Company Stage
+```
+
+![](Data%20Viz%20PNGs/Sheet%208.png)
+
+```{sql connection=con}
+SELECT
+    company,
+    SUM(total_laid_off) AS total_laid_off,
+    MAX(funds_raised) AS funds_raised
+FROM layoffs_staging2
+WHERE funds_raised IS NOT NULL
+GROUP BY company
+; 
+## Funds Raised vs Layoffs
+```
+
+![](Data%20Viz%20PNGs/Sheet%206.png)
+
+![](Data%20Viz%20PNGs/Sheet%207.png)
+
+```{sql connection=con}
+SELECT
+    company,
+    industry,
+    country,
+    total_laid_off,
+    funds_raised
+FROM layoffs_staging2
+WHERE percentage_laid_off = 1
+ORDER BY total_laid_off DESC
+;
+## Companies That Shut Down (100% Layoffs)
+```
+
+![](Data%20Viz%20PNGs/Sheet%209.png)
+
+```{sql connection=con}
+WITH company_year AS (
+    SELECT
+        company,
+        YEAR(`date`) AS year,
+        SUM(total_laid_off) AS total_laid_off
+    FROM layoffs_staging2
+    GROUP BY company, year
+),
+ranked AS (
+    SELECT *,
+           DENSE_RANK() OVER (PARTITION BY year ORDER BY total_laid_off DESC) AS rank_
+    FROM company_year
+)
+SELECT *
+FROM ranked
+WHERE rank_ <= 5
+; 
+## Top 5 Companies by Layoffs Each Year
+```
+
+![](Data%20Viz%20PNGs/Dashboard%201.png)

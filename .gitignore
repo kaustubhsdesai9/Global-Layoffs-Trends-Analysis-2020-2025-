@@ -1,3 +1,8 @@
-._*
 .DS_Store
-*.twbx
+._*
+.Spotlight-V100
+.Trashes
+~
+*.tmp
+.ipynb_checkpoints/
+__pycache__/
